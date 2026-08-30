@@ -1,0 +1,66 @@
+# ── Secrets & Environment ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.production.example
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Generated / Cache ─────────────────────────────────────────────────────────
+backend/cache/
+# (FAISS indexes, BM25 pickle, chunks.pkl — regenerated on first run)
+
+# ── Node / Next.js ────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+
+# ── Dead code (old Qdrant/SQLAlchemy architecture — not used) ─────────────────
+scripts/
+backend/app/db/
+backend/app/config_prod.py
+backend/app/services/constitution_rag_prod.py
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Also exclude production example (has real secrets)
+.env.production.example
+
+# Stale planning/migration docs
+DATASET_*.md
+ENV_*.md
+PRODUCTION_*.md
+MIGRATE.sh
+check_env.py
+DESIGN.md
+frontend/AGENTS.md
+frontend/CLAUDE.md
+frontend/README.md
+backend/main_prod.py
+backend/app/api/routes/chat_prod.py
+*.ipynb
