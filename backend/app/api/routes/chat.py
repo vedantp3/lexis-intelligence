@@ -11,7 +11,16 @@ from backend.app.services.constitution_rag import ConstitutionalRAG
 logger = logging.getLogger("chat_route")
 
 router = APIRouter(prefix="/api", tags=["chat"])
-rag = ConstitutionalRAG()
+
+# Lazy-loaded RAG instance to prevent startup timeout / OOM crashes
+_rag_instance = None
+
+def get_rag() -> ConstitutionalRAG:
+    global _rag_instance
+    if _rag_instance is None:
+        logger.info("Initializing ConstitutionalRAG on-demand...")
+        _rag_instance = ConstitutionalRAG()
+    return _rag_instance
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -50,6 +59,7 @@ async def chat(
     save_message(session_id=session_id, role="user", content=request.question)
 
     try:
+        rag = get_rag()
         result = rag.run(request.question, use_cache=True)
     except Exception as exc:
         logger.error("RAG pipeline failed for user %s: %s", user.email, exc)
