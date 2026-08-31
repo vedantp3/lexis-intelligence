@@ -101,4 +101,4 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host=BACKEND_HOST, port=BACKEND_PORT, reload=True)
+    uvicorn.run("backend.main:app", host=BACKEND_HOST, port=BACKEND_PORT, reload=True)
