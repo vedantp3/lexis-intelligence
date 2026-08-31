@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: lexis-intelligence-api
+    runtime: python
+    region: oregon
+    plan: starter          # $7/mo — needed for ML models (512MB RAM)
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false        # Set manually in Render dashboard
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: NEXTAUTH_URL
+        sync: false        # Set to your Vercel URL after deploying frontend
+      - key: DATASET_NAME
+        value: moonmelonpizza/constitution_of_india
+      - key: ENABLE_RATE_LIMITING
+        value: "true"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "10"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: HF_HUB_DISABLE_SYMLINKS_WARNING
+        value: "1"
+      - key: ALLOWED_ORIGINS
+        sync: false        # Set to your Vercel URL e.g. https://lexis-intelligence.vercel.app
