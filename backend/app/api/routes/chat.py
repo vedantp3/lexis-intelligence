@@ -18,8 +18,8 @@ def get_rag():
     """Initialize the heavy RAG stack on first use, not during app import/startup."""
     global _rag_instance
     if _rag_instance is None:
-        logger.info("Initializing ConstitutionalRAG on first chat request...")
-        from backend.app.services.constitution_rag import ConstitutionalRAG
+        logger.info("Initializing production-safe ConstitutionalRAG on first chat request...")
+        from backend.app.services.constitution_rag_lite import ConstitutionalRAG
 
         _rag_instance = ConstitutionalRAG()
     return _rag_instance

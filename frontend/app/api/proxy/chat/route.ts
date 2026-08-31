@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
-  const backendRes = await fetch(`${API_URL}/api/chat`, {
+  const backendRes = await fetch(`${API_URL.replace(/\/+$/, "")}/api/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
     body: JSON.stringify(body),
   });
 
-  const data = await backendRes.json();
+  const raw = await backendRes.text();
+  const data = raw ? JSON.parse(raw) : { detail: "Backend returned an empty response." };
   return Response.json(data, { status: backendRes.status });
 }
