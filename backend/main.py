@@ -34,24 +34,12 @@ limiter = Limiter(key_func=get_remote_address, enabled=ENABLE_RATE_LIMITING)
 # ── App lifespan (startup / shutdown) ────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import threading
     logger.info("Starting Constitution AI backend...")
     init_db()  # Create Neon Postgres tables if they don't exist
-
-    # Load RAG pipeline in a background thread so the port binds immediately.
-    # Render (and other cloud platforms) timeout if the port isn't open within ~60s.
-    # The first chat request will wait for loading if it arrives before the thread finishes.
-    def _preload():
-        try:
-            from backend.app.api.routes.chat import rag
-            logger.info("Background: pre-loading RAG pipeline...")
-            rag.ensure_loaded()
-            logger.info("Background: RAG pipeline ready.")
-        except Exception as exc:
-            logger.error("Background RAG preload failed: %s", exc)
-
-    threading.Thread(target=_preload, daemon=True).start()
-
+    
+    # Preloading thread removed to prevent Out-Of-Memory (Exit Code 137) crashes 
+    # on low-resource free hosting tiers. The RAG pipeline will load on demand.
+    
     yield
     logger.info("Shutting down Constitution AI backend.")
 
