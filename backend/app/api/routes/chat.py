@@ -1,17 +1,28 @@
 import logging
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from backend.app.auth import AuthUser, require_user
 from backend.app.database import save_message, upsert_session
 from backend.app.models import ChatRequest, ChatResponse, HealthResponse
-from backend.app.services.constitution_rag import ConstitutionalRAG
 
 logger = logging.getLogger("chat_route")
 
 router = APIRouter(prefix="/api", tags=["chat"])
-rag = ConstitutionalRAG()
+_rag_instance: Optional[object] = None
+
+
+def get_rag():
+    """Initialize the heavy RAG stack on first use, not during app import/startup."""
+    global _rag_instance
+    if _rag_instance is None:
+        logger.info("Initializing ConstitutionalRAG on first chat request...")
+        from backend.app.services.constitution_rag import ConstitutionalRAG
+
+        _rag_instance = ConstitutionalRAG()
+    return _rag_instance
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -50,7 +61,7 @@ async def chat(
     save_message(session_id=session_id, role="user", content=request.question)
 
     try:
-        result = rag.run(request.question, use_cache=True)
+        result = get_rag().run(request.question, use_cache=True)
     except Exception as exc:
         logger.error("RAG pipeline failed for user %s: %s", user.email, exc)
         raise HTTPException(status_code=500, detail=f"Chat processing failed: {str(exc)}") from exc
