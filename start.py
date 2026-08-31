@@ -6,29 +6,33 @@ import os
 import sys
 import traceback
 
-print(f"=== START.PY BOOT ===", flush=True)
+print("=== START.PY BOOT ===", flush=True)
 print(f"Python: {sys.version}", flush=True)
 print(f"CWD: {os.getcwd()}", flush=True)
 print(f"PORT env: {os.environ.get('PORT', 'NOT SET')}", flush=True)
-print(f"sys.path: {sys.path[:3]}", flush=True)
 
 try:
+    print("Step 1: Importing uvicorn...", flush=True)
     import uvicorn
-    print("uvicorn: OK", flush=True)
+    print("Step 1: OK", flush=True)
+
+    print("Step 2: Importing backend.main...", flush=True)
+    from backend.main import app          # <-- catches import crashes with full traceback
+    print("Step 2: OK — FastAPI app loaded", flush=True)
 
     port = int(os.environ.get("PORT", 8000))
-    host = "0.0.0.0"
-    print(f"Binding to {host}:{port} ...", flush=True)
+    print(f"Step 3: Starting server on 0.0.0.0:{port} ...", flush=True)
 
     uvicorn.run(
-        "backend.main:app",
-        host=host,
+        app,                              # pass object, not string — no second import needed
+        host="0.0.0.0",
         port=port,
         log_level="info",
         access_log=True,
     )
+
 except Exception as exc:
-    print(f"\n=== FATAL CRASH ===", flush=True)
+    print("\n=== FATAL CRASH ===", flush=True)
     traceback.print_exc()
     sys.exit(1)
 
