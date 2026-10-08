@@ -41,7 +41,7 @@ export default function LoginPage() {
             <div style={styles.featureList}>
               {[
                 { icon: "⚖️", label: "Hybrid RAG retrieval across all 448 articles" },
-                { icon: "📋", label: "Grounding audit with confidence scoring" },
+                { icon: "📋", label: "Structured legal analysis with exceptions" },
                 { icon: "🔗", label: "Article-level citations with legal context" },
                 { icon: "✦", label: "Powered by Gemini 2.5 Flash" },
               ].map(({ icon, label }) => (

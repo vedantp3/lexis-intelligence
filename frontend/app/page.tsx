@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { AuthGuard } from "./components/AuthGuard";
-import { AuditBadge } from "./components/AuditBadge";
+
 import { SourceCard } from "./components/SourceCard";
 import type { Message, ChatSession } from "./types";
 
@@ -104,7 +104,7 @@ function ChatApp() {
         role: "assistant",
         content: data.answer.detailed_legal_analysis,
         sources: data.sources,
-        audit: data.audit,
+
         answer: data.answer,
         fromCache: data.from_cache,
         latencyMs: data.latency_ms,
@@ -320,10 +320,7 @@ function ChatApp() {
               </div>
             )}
           </div>
-          <div style={s.topbarRight}>
-            <div style={s.statusDot} />
-            <span style={s.statusText}>Backend Connected</span>
-          </div>
+          <div style={s.topbarRight} />
         </header>
 
         {/* Messages */}
@@ -494,8 +491,7 @@ function AssistantBubble({ message }: { message: Message }) {
           )}
         </div>
 
-        {/* Audit badge */}
-        {message.audit && <AuditBadge audit={message.audit} />}
+
 
         {/* Sources */}
         {showSources && hasSources && (
@@ -801,18 +797,6 @@ const s: { [key: string]: React.CSSProperties } = {
     display: "flex",
     alignItems: "center",
     gap: "6px",
-  },
-  statusDot: {
-    width: "7px",
-    height: "7px",
-    borderRadius: "50%",
-    background: "#10B981",
-    animation: "pulse 2s infinite",
-  },
-  statusText: {
-    fontSize: "12px",
-    color: "#64748B",
-    fontWeight: 500,
   },
   messagesArea: {
     flex: 1,
