@@ -19,6 +19,8 @@ export type ConstitutionalAnswer = {
 };
 
 export type Message = {
+  /** Client-side id (set for streamed replies so they can be updated in place). */
+  id?: string;
   role: "user" | "assistant";
   content: string;
   sources?: SourceChunk[];
@@ -26,6 +28,8 @@ export type Message = {
   answer?: ConstitutionalAnswer;
   fromCache?: boolean;
   latencyMs?: number;
+  /** True while the answer is still streaming in. */
+  streaming?: boolean;
 };
 
 export type ChatSession = {

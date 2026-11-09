@@ -5,6 +5,9 @@ import { useSession, signOut } from "next-auth/react";
 import { AuthGuard } from "./components/AuthGuard";
 
 import { SourceCard } from "./components/SourceCard";
+import { VoiceBar } from "./components/VoiceBar";
+import { useVoiceConversation } from "./lib/useVoiceConversation";
+import { streamChat, type StreamSections } from "./lib/chatStream";
 import type { Message, ChatSession } from "./types";
 
 const STARTER_QUESTIONS = [
@@ -73,10 +76,25 @@ function ChatApp() {
   }, []);
 
 
-  const sendMessage = async (event?: FormEvent, overrideQuestion?: string) => {
+  /** Insert or update the in-progress assistant message identified by `id`. */
+  const upsertAssistant = (id: string, patch: Partial<Message>) => {
+    setMessages((prev) => {
+      const i = prev.findIndex((m) => m.id === id);
+      if (i === -1) return [...prev, { id, role: "assistant", content: "", ...patch }];
+      const next = [...prev];
+      next[i] = { ...next[i], ...patch };
+      return next;
+    });
+  };
+
+  const sendMessage = async (
+    event?: FormEvent,
+    overrideQuestion?: string,
+    onProgress?: (sections: StreamSections) => void
+  ): Promise<Message | null> => {
     event?.preventDefault();
     const trimmed = (overrideQuestion ?? question).trim();
-    if (!trimmed || loading) return;
+    if (!trimmed || loading) return null;
 
     const userMessage: Message = { role: "user", content: trimmed };
     setMessages((prev) => [...prev, userMessage]);
@@ -85,43 +103,84 @@ function ChatApp() {
 
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
+    const replyId = crypto.randomUUID();
     try {
-      // Use server-side proxy — auth is handled transparently server-side
-      const response = await fetch("/api/proxy/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: trimmed,
-          history: [],
-          session_id: activeSessionId,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Request failed");
+      // Streamed via the server-side proxy — auth is handled transparently server-side.
+      // The answer appears as Gemini writes it; the grounding audit arrives with `final`.
+      const data = await streamChat(
+        { question: trimmed, session_id: activeSessionId },
+        {
+          onSources: (sources) => upsertAssistant(replyId, { sources, streaming: true }),
+          onText: (sections) => {
+            upsertAssistant(replyId, {
+              streaming: true,
+              content: sections.analysis,
+              answer: {
+                summary: sections.summary,
+                detailed_legal_analysis: sections.analysis,
+                exceptions_or_limitations: sections.exceptions,
+                articles_cited: sections.articles,
+              },
+            });
+            onProgress?.(sections);
+          },
+        }
+      );
 
       const assistantMessage: Message = {
+        id: replyId,
         role: "assistant",
         content: data.answer.detailed_legal_analysis,
         sources: data.sources,
-
+        audit: data.audit,
         answer: data.answer,
         fromCache: data.from_cache,
         latencyMs: data.latency_ms,
+        streaming: false,
       };
-      setMessages((prev) => [...prev, assistantMessage]);
+      upsertAssistant(replyId, assistantMessage);
+      return assistantMessage;
     } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Something went wrong. Please try again.\n\nError: ${error instanceof Error ? error.message : "Unknown error"}`,
-        },
-      ]);
+      upsertAssistant(replyId, {
+        streaming: false,
+        answer: undefined,
+        sources: undefined,
+        content: `Something went wrong. Please try again.\n\nError: ${error instanceof Error ? error.message : "Unknown error"}`,
+      });
+      return null;
     } finally {
       setLoading(false);
     }
   };
+
+  // ── Voice-to-voice: spoken questions go through the same grounded pipeline ──
+  // The summary is spoken as soon as it has streamed in; the analysis follows when complete.
+  const voice = useVoiceConversation({
+    onUtterance: async (spoken, say) => {
+      let spokeSummary = false;
+      const reply = await sendMessage(undefined, spoken, (sections) => {
+        if (!spokeSummary && sections.summary && sections.current && sections.current !== "SUMMARY") {
+          spokeSummary = true;
+          say(sections.summary);
+        }
+      });
+      if (!reply) return "Sorry, I could not get an answer for that. Please try asking again.";
+      const { summary, detailed_legal_analysis } = reply.answer ?? {};
+      const analysis = detailed_legal_analysis ?? reply.content;
+      return spokeSummary ? analysis : [summary, analysis].filter(Boolean).join(" ");
+    },
+  });
+  const { active: voiceActive, interrupt: voiceInterrupt } = voice;
+
+  // Esc stops the assistant mid-sentence
+  useEffect(() => {
+    if (!voiceActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") voiceInterrupt();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [voiceActive, voiceInterrupt]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -137,6 +196,7 @@ function ChatApp() {
   };
 
   const newSession = () => {
+    voice.stop();
     const newId = crypto.randomUUID();
     setActiveSessionId(newId);
     setSessions((prev) => [
@@ -154,6 +214,11 @@ function ChatApp() {
       content: "New research session started. How can I assist you with the Constitution of India?",
     }]);
   };
+
+  // Hide the "thinking" dots once streamed answer text is visible.
+  const lastMessage = messages[messages.length - 1];
+  const showThinking =
+    loading && !(lastMessage?.streaming && (lastMessage.content || lastMessage.answer?.summary));
 
   const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "U";
   const userName = session?.user?.name ?? "Researcher";
@@ -178,6 +243,8 @@ function ChatApp() {
           40% { transform: scale(1); opacity: 1; }
         }
         .msg-bubble { animation: fadeInUp 0.3s ease forwards; }
+        @keyframes caret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        .stream-cursor { display: inline-block; width: 7px; height: 1em; margin-left: 2px; vertical-align: text-bottom; background: #D4AF37; animation: caret 1s step-end infinite; }
         .starter-btn:hover {
           border-color: #D4AF37 !important;
           color: #0F172A !important;
@@ -190,6 +257,9 @@ function ChatApp() {
           transform: translateY(-1px);
         }
         .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .mic-btn:hover:not(:disabled) { border-color: #D4AF37 !important; color: #0F172A !important; }
+        .mic-btn.active:hover { background: #B91C1C !important; color: #FFFFFF !important; }
+        .mic-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .sidebar-session:hover { background: rgba(15,23,42,0.04) !important; }
         .sidebar-session.active { background: rgba(15,23,42,0.06) !important; border-color: rgba(15,23,42,0.12) !important; }
         .new-chat-btn:hover { background: #1E293B !important; }
@@ -327,7 +397,7 @@ function ChatApp() {
         <div style={s.messagesArea}>
           <div style={s.messagesInner}>
             {messages.map((msg, index) => (
-              <div key={`${msg.role}-${index}`} className="msg-bubble">
+              <div key={msg.id ?? `${msg.role}-${index}`} className="msg-bubble">
                 {msg.role === "user" ? (
                   <UserBubble message={msg} userImage={userImage} userInitial={userInitial} />
                 ) : (
@@ -336,7 +406,7 @@ function ChatApp() {
               </div>
             ))}
 
-            {loading && <ThinkingIndicator />}
+            {showThinking && <ThinkingIndicator />}
             <div ref={messagesEndRef} />
           </div>
         </div>
@@ -359,6 +429,16 @@ function ChatApp() {
             </div>
           )}
 
+          {(voice.active || voice.error) && (
+            <VoiceBar
+              state={voice.state}
+              interim={voice.interim}
+              error={voice.error}
+              onInterrupt={voice.interrupt}
+              onStop={voice.stop}
+            />
+          )}
+
           <form onSubmit={sendMessage} style={s.inputForm}>
             <div style={s.inputWrapper}>
               <textarea
@@ -370,6 +450,30 @@ function ChatApp() {
                 rows={1}
                 style={s.textarea}
               />
+              <button
+                type="button"
+                className={`mic-btn${voice.active ? " active" : ""}`}
+                onClick={voice.active ? voice.stop : voice.start}
+                disabled={!voice.supported}
+                style={{ ...s.micBtn, ...(voice.active ? s.micBtnActive : {}) }}
+                title={
+                  !voice.supported
+                    ? "Voice mode needs Chrome or Edge"
+                    : voice.active
+                      ? "End voice conversation"
+                      : "Start voice conversation"
+                }
+                aria-label={voice.active ? "End voice conversation" : "Start voice conversation"}
+              >
+                {voice.active ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <rect x="9" y="2" width="6" height="12" rx="3"/>
+                    <path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8"/>
+                  </svg>
+                )}
+              </button>
               <button
                 type="submit"
                 disabled={loading || !question.trim()}
@@ -391,7 +495,7 @@ function ChatApp() {
               </button>
             </div>
             <p style={s.hint}>
-              Press <kbd style={s.kbd}>Enter</kbd> to send · <kbd style={s.kbd}>Shift+Enter</kbd> for new line
+              Press <kbd style={s.kbd}>Enter</kbd> to send · <kbd style={s.kbd}>Shift+Enter</kbd> for new line · Tap the mic for a voice conversation
             </p>
           </form>
         </div>
@@ -450,7 +554,10 @@ function AssistantBubble({ message }: { message: Message }) {
 
         {/* Main analysis */}
         <div style={ab.bubble}>
-          <p style={ab.text}>{message.content}</p>
+          <p style={ab.text}>
+            {message.content}
+            {message.streaming && <span className="stream-cursor" aria-hidden="true" />}
+          </p>
 
           {/* Exceptions */}
           {message.answer?.exceptions_or_limitations && (
@@ -472,6 +579,9 @@ function AssistantBubble({ message }: { message: Message }) {
 
         {/* Meta row */}
         <div style={ab.metaRow}>
+          {message.streaming && (
+            <span style={ab.latency}>Writing answer · verifying against sources…</span>
+          )}
           {message.fromCache !== undefined && (
             <span style={message.fromCache ? ab.cacheBadge : ab.liveBadge}>
               {message.fromCache ? "⚡ Cached" : "✦ Live"}
@@ -874,6 +984,25 @@ const s: { [key: string]: React.CSSProperties } = {
     color: "#FFFFFF",
     transition: "all 0.2s",
     flexShrink: 0,
+  },
+  micBtn: {
+    width: "46px",
+    height: "46px",
+    background: "#F8FAFC",
+    border: "1.5px solid #E2E8F0",
+    borderRadius: "12px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#475569",
+    transition: "all 0.2s",
+    flexShrink: 0,
+  },
+  micBtnActive: {
+    background: "#DC2626",
+    borderColor: "#DC2626",
+    color: "#FFFFFF",
   },
   hint: {
     fontSize: "11px",

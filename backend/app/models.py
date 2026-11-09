@@ -47,7 +47,7 @@ class ConstitutionalAnswer(BaseModel):
             "Cover: (1) what the provision says in simple terms, (2) how it works in practice "
             "step-by-step, (3) who is affected and how, (4) a real-world example or analogy, "
             "(5) why this provision matters to ordinary citizens. "
-            "Minimum 300 words. Do NOT use legal jargon without explaining it."
+            "About 150-250 words. Do NOT use legal jargon without explaining it."
         )
     )
     exceptions_or_limitations: str = Field(

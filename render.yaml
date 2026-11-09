@@ -4,7 +4,8 @@ services:
     runtime: python
     region: oregon
     plan: starter          # $7/mo — needed for ML models (512MB RAM)
-    buildCommand: pip install -r backend/requirements.txt
+    # Build the article index + download the ONNX models at build time so boot is fast.
+    buildCommand: pip install -r backend/requirements.txt && python -m backend.app.services.constitution_rag
     startCommand: python start.py
     envVars:
       - key: GEMINI_API_KEY
@@ -27,6 +28,12 @@ services:
         value: "true"
       - key: RATE_LIMIT_PER_MINUTE
         value: "10"
+      - key: RAG_MODE
+        value: full         # set to "lite" if the instance runs out of memory
+      - key: PRELOAD_RAG
+        value: "true"
+      - key: GEMINI_THINKING_BUDGET
+        value: "0"
       - key: LOG_LEVEL
         value: INFO
       - key: HF_HUB_DISABLE_SYMLINKS_WARNING

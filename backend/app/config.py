@@ -9,6 +9,17 @@ load_dotenv(BASE_DIR / ".env")
 # ── AI / LLM ──────────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 DATASET_NAME = os.getenv("DATASET_NAME", "moonmelonpizza/constitution_of_india")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite")
+# 0 = thinking off (fastest). -1 = leave the model default (dynamic thinking).
+GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
+
+# ── RAG ───────────────────────────────────────────────────────────────────────
+# "full" = retrieval-grounded pipeline (default). "lite" = no retrieval, Gemini only
+# (emergency fallback if the host runs out of memory).
+RAG_MODE = os.getenv("RAG_MODE", "full").lower()
+# Load models + index in a background thread at startup so the first user doesn't wait.
+PRELOAD_RAG = os.getenv("PRELOAD_RAG", "true").lower() == "true"
 
 # ── Server ────────────────────────────────────────────────────────────────────
 BACKEND_HOST = os.getenv("BACKEND_HOST", "0.0.0.0")

@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 
 
 @router.get("", response_model=List[SessionSummary])
-async def list_sessions(user: AuthUser = Depends(require_user)):
+def list_sessions(user: AuthUser = Depends(require_user)):
     """Return all sessions for the authenticated user, most recent first."""
     rows = get_user_sessions(user.email)
     return [
@@ -37,7 +37,7 @@ async def list_sessions(user: AuthUser = Depends(require_user)):
 
 
 @router.get("/{session_id}", response_model=SessionDetail)
-async def get_session(session_id: str, user: AuthUser = Depends(require_user)):
+def get_session(session_id: str, user: AuthUser = Depends(require_user)):
     """Return all messages in a session.  Returns 404 if session not found or not owned by user."""
     rows = get_session_messages(session_id, user.email)
     if rows is None or (isinstance(rows, list) and len(rows) == 0):
@@ -80,7 +80,7 @@ async def get_session(session_id: str, user: AuthUser = Depends(require_user)):
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_session(session_id: str, user: AuthUser = Depends(require_user)):
+def remove_session(session_id: str, user: AuthUser = Depends(require_user)):
     """Delete a session and all its messages."""
     deleted = delete_session(session_id, user.email)
     if not deleted:

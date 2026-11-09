@@ -8,19 +8,9 @@
  * then forwards the request to FastAPI.
  */
 import { getServerSession } from "next-auth";
-import { SignJWT } from "jose";
 import { authOptions } from "../../../lib/authOptions";
+import { API_URL, makeBackendToken } from "../../../lib/backendToken";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-async function makeBackendToken(email: string, name: string): Promise<string> {
-  const secret = new TextEncoder().encode(process.env.NEXTAUTH_SECRET ?? "dev-secret");
-  return new SignJWT({ email, name, user: { email, name } })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign(secret);
-}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -36,7 +26,7 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
-  const backendRes = await fetch(`${API_URL.replace(/\/+$/, "")}/api/chat`, {
+  const backendRes = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

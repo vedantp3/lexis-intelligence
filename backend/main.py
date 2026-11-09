@@ -1,23 +1,18 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
+from backend.app.api.routes.chat import preload_rag
 from backend.app.api.routes.chat import router as chat_router
 from backend.app.api.routes.history import router as history_router
-from backend.app.config import (
-    ALLOWED_ORIGINS,
-    BACKEND_HOST,
-    BACKEND_PORT,
-    ENABLE_RATE_LIMITING,
-    LOG_LEVEL,
-    RATE_LIMIT_PER_MINUTE,
-)
+from backend.app.config import ALLOWED_ORIGINS, BACKEND_HOST, BACKEND_PORT, LOG_LEVEL, PRELOAD_RAG
 from backend.app.database import init_db
+from backend.app.limiter import limiter
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -27,19 +22,18 @@ logging.basicConfig(
 logger = logging.getLogger("main")
 
 
-# ── Rate limiter ──────────────────────────────────────────────────────────────
-limiter = Limiter(key_func=get_remote_address, enabled=ENABLE_RATE_LIMITING)
-
-
 # ── App lifespan (startup / shutdown) ────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Constitution AI backend...")
     init_db()  # Create Neon Postgres tables if they don't exist
-    
-    # Preloading thread removed to prevent Out-Of-Memory (Exit Code 137) crashes 
-    # on low-resource free hosting tiers. The RAG pipeline will load on demand.
-    
+
+    # Load the ONNX models + index in the background so the first question doesn't pay
+    # for it. (The old torch stack was too heavy to preload on 512 MB hosts; the fastembed
+    # stack is ~400 MB peak. Set PRELOAD_RAG=false or RAG_MODE=lite if memory is tight.)
+    if PRELOAD_RAG:
+        threading.Thread(target=preload_rag, name="rag-preload", daemon=True).start()
+
     yield
     logger.info("Shutting down Constitution AI backend.")
 
@@ -69,12 +63,6 @@ app.add_middleware(
 # ── Routes ────────────────────────────────────────────────────────────────────
 app.include_router(chat_router)
 app.include_router(history_router)
-
-
-# Apply rate limit to the chat endpoint specifically
-# (5 requests/minute per IP by default, configurable via RATE_LIMIT_PER_MINUTE)
-from backend.app.api.routes.chat import chat as chat_endpoint
-limiter.limit(f"{RATE_LIMIT_PER_MINUTE}/minute")(chat_endpoint)
 
 
 @app.get("/")
