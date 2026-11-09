@@ -32,6 +32,19 @@ export type Message = {
   streaming?: boolean;
 };
 
+/** One saved message, as returned by GET /api/history/{session_id}. */
+export type HistoryMessage = {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  sources?: SourceChunk[] | null;
+  audit?: GroundingValidation | null;
+  answer_summary?: string | null;
+  articles_cited?: string[] | null;
+  from_cache?: boolean;
+  latency_ms?: number | null;
+};
+
 export type ChatSession = {
   id: string;
   title: string;

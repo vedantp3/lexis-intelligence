@@ -8,7 +8,7 @@ import { SourceCard } from "./components/SourceCard";
 import { VoiceBar } from "./components/VoiceBar";
 import { useVoiceConversation } from "./lib/useVoiceConversation";
 import { streamChat, type StreamSections } from "./lib/chatStream";
-import type { Message, ChatSession } from "./types";
+import type { Message, ChatSession, HistoryMessage } from "./types";
 
 const STARTER_QUESTIONS = [
   "What are the Fundamental Rights under Part III?",
@@ -17,6 +17,25 @@ const STARTER_QUESTIONS = [
   "What are the grounds for disqualification of Members of Parliament?",
   "How does Article 356 (President's Rule) work?",
 ];
+
+function fromHistory(row: HistoryMessage): Message {
+  if (row.role === "user") return { id: String(row.id), role: "user", content: row.content };
+  return {
+    id: String(row.id),
+    role: "assistant",
+    content: row.content,
+    sources: row.sources ?? undefined,
+    audit: row.audit ?? undefined,
+    answer: {
+      summary: row.answer_summary ?? "",
+      articles_cited: row.articles_cited ?? [],
+      detailed_legal_analysis: row.content,
+      exceptions_or_limitations: "", // not stored in chat history
+    },
+    fromCache: row.from_cache,
+    latencyMs: row.latency_ms ?? undefined,
+  };
+}
 
 export default function Home() {
   return (
@@ -43,6 +62,7 @@ function ChatApp() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const openRequestRef = useRef(0); // only the most recently opened session may fill the chat
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -195,8 +215,35 @@ function ChatApp() {
     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
   };
 
+  /** Open a saved session and show its messages from the database. */
+  const openSession = async (id: string) => {
+    if (loading) return; // an answer is still streaming into the current session
+    voice.stop();
+    const request = ++openRequestRef.current;
+    const show = (content: string) => setMessages([{ role: "assistant", content }]);
+    setActiveSessionId(id);
+    show("Loading this session...");
+    try {
+      const res = await fetch(`/api/proxy/history/${encodeURIComponent(id)}`);
+      if (request !== openRequestRef.current) return;
+      if (res.status === 404) {
+        show("This session has no saved messages yet. Ask a question to begin.");
+        return;
+      }
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data: { messages: HistoryMessage[] } = await res.json();
+      if (request !== openRequestRef.current) return;
+      setMessages(data.messages.map(fromHistory));
+    } catch {
+      if (request === openRequestRef.current) {
+        show("Could not load this session. Please try opening it again.");
+      }
+    }
+  };
+
   const newSession = () => {
     voice.stop();
+    openRequestRef.current += 1;
     const newId = crypto.randomUUID();
     setActiveSessionId(newId);
     setSessions((prev) => [
@@ -305,10 +352,7 @@ function ChatApp() {
                     key={sess.id}
                     className={`sidebar-session${sess.id === activeSessionId ? " active" : ""}`}
                     style={s.sessionItem}
-                    onClick={() => {
-                      setActiveSessionId(sess.id);
-                      setMessages([{ role: "assistant", content: "Session loaded. Continue your research." }]);
-                    }}
+                    onClick={() => openSession(sess.id)}
                   >
                     <div style={s.sessionIcon}>⚖</div>
                     <div style={s.sessionInfo}>
